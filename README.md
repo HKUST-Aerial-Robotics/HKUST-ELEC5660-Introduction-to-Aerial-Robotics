@@ -4,13 +4,11 @@ ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aeria
 
 **Instructor:** [Shaojie SHEN](http://www.ece.ust.hk/ece.php/profile/facultydetail/eeshaojie)
 
-**TAs:** [Peize Liu](), Haokun Wang
+**TAs:** [Peize Liu](), [Haokun Wang](hwangeh@connect.ust.hk)
 
 **Lab:** [HKUST Aerial Robotics Group](http://uav.ust.hk)
 
 ---
-
-
 
 ### File structure
 
@@ -18,8 +16,9 @@ ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aeria
 * lab: code and lab notes
 * project_docker: docker related files for porject 2 &3
 
+### Further development
 
-
+1. run ./ini_repo.sh  φst
 
 ### Contact
 
