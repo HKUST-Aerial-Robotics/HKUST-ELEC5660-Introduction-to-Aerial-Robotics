@@ -1,4 +1,4 @@
-## 5660 Docker
+## 5660 Docker readme
 
 5660 docker based on Ubuntu16.04 & ROS kinetic
 
@@ -46,12 +46,13 @@ Choose your platform and operating system to run your docker container for ELEC5
   - `-e DISPLAY=host.docker.internal:0.0` specifies the port of the GUI.
   - `mortyl0834/elec5660-docker-img:v2.0` declares the docker image we are using, which will be automatically downloaded from the docker hub the first time we run it.
     example:
+
     ```
     docker run -it --volume="/c/usr/workspace:/home/workspace" -e DISPLAY=host.docker.internal:0.0 --name="elec5660-container" mortyl0834/elec5660-docker-img:v2.0 /bin/bash
     ```
+
     `/c/usr/workspace` is /usr/workspace in Disk C:/
   - `mortyl0834/elec5660-docker-img:v2.0` declares the docker image we are using, which will be automatically downloaded from the docker hub the first time we run it.
-
 - Open a new terminal when a container is running.
 
   ```
@@ -109,6 +110,7 @@ It is both ok to install Docker-Desktop or Docker-engine
    if rviz not found, source setup script `source /opt/ros/kinetic/setup.bash` then retry rviz
    ![1679232329410](image/5660_docker/1679232329410.png)
    use a browser to visit [http://localhost:8080/vnc.html](http://localhost:8080/vnc.html) . You can now see the app's GUI
+
 #### Validation
 
 - Source the ROS shell via `source /opt/ros/kinetic/setup.bash`, then run `roscore` in your docker container.

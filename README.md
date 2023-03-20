@@ -18,8 +18,10 @@ ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aeria
 
 ### Further development
 
-1. run ./ini_repo.sh  φst
+1. run ./ini_repo.sh first
+2. create a new branch for development and test
+3. push a pull request to merge your new code into main-branch
 
 ### Contact
 
-For qustions and suggestions, please contact TAs
+For qustions and suggestions, please contact TAs [Peize Liu](), [Haokun Wang](hwangeh@connect.ust.hk)
