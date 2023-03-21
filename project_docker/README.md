@@ -65,7 +65,7 @@ Choose your platform and operating system to run your docker container for ELEC5
 - Source the ROS shell via `source /opt/ros/kinetic/setup.bash`, then run `roscore` in your docker container.
 - Open a new terminal, source the ROS shell, and run `rviz` to open the "Rviz" window. You will see ![alt Rviz](./misc/Rviz.PNG)
 
-#### Troubleshotting
+#### Troubleshooting
 
 ### Ubuntu & MacOS(armv64 and x86/AMD64)
 
@@ -156,7 +156,7 @@ reconnect to elec5660-container
 * `docker stop <container's name>`: to stop container named `<container's name>`
 * `docker rm <container's name>:` to remove container named `<container's name>`
 
-## Troubleshoting
+## Troubleshooting
 
 #### LibGL error: No matching fbConfigs or visuals found
 
