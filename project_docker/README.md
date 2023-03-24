@@ -100,7 +100,7 @@ It is both ok to install Docker-Desktop or Docker-engine
 3. start a roscore server container form elec5660-docker-img `docker run -d --net=ros --name elec5660-roscore mortyl0834/elec5660-docker-img:v2.0 roscore `
 
    ![1679232068196](image/5660_docker/1679232068196.png)
-4. start container basing on elec5660-docker-img:v2.0 `docker run -it --name="elec5660-container" --volume="<files in your local mechine>:/home/workspace"  --net=ros --env="DISPLAY=elec5660-novnc:0.0" --env="ROS_MASTER_URI=http://elec5660-roscore:11311" elec5660-docker-img:v2.0 bash`
+4. start container basing on elec5660-docker-img:v2.0 `docker run -it --name="elec5660-container" --volume="<files in your local mechine>:/home/workspace"  --net=ros --env="DISPLAY=elec5660-novnc:0.0" --env="ROS_MASTER_URI=http://elec5660-roscore:11311" /elec5660-docker-img:v2.0 bash`
    ![1679232200996](image/5660_docker/1679232200996.png)
    `--volume="<dirs in your local mechine>:/home/workspace"` maps the local directory "\<dirs in your local mechine\>" to the location in docker container "/home/workspace".
    `-net=ros --env="DISPLAY=novnc:0.0"` maps DISPLAY port to connect with novnc container
@@ -122,7 +122,7 @@ It is both ok to install Docker-Desktop or Docker-engine
 1. use  `docker ps -a | grep elec5660-container` to check whether you have created container named elec5660-container or not
    ![1679279866501](image/5660_docker/1679279866501.png)
 2. use `docker start elec5660-container` to start container
-3. use `docker exec -it elec-5660-container` to reconnect to your container
+3. use `docker exec -it elec5660-container /bin/bash` to reconnect to your container
 
 if you failed in step 1, you need to check your develop environment
 
