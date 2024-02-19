@@ -4,7 +4,7 @@
 
 **Instructor:** [Shaojie SHEN](http://www.ece.ust.hk/ece.php/profile/facultydetail/eeshaojie)
 
-**TAs:** [Haojia Li](), [Chen Feng](https://chen-albert-feng.github.io/AlbertFeng.github.io/)
+**TAs:** [Haojia LI](), [Chen FENG](https://chen-albert-feng.github.io/AlbertFeng.github.io/)
 
 **Lab:** [HKUST Aerial Robotics Group](http://uav.ust.hk)
 
@@ -24,4 +24,4 @@
 
 ### Contact
 
-For qustions and suggestions, please contact TAs [Haojia Li](hlied@connect.ust.hk), [Chen Feng](cfengag@connect.ust.hk)
+For qustions and suggestions, please contact TAs [Haojia LI](hlied@connect.ust.hk), [Chen FENG](cfengag@connect.ust.hk)
