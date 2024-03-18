@@ -100,7 +100,7 @@ It is both ok to install Docker-Desktop or Docker-engine
 3. start a roscore server container form elec5660-docker-img `docker run -d --net=ros --name elec5660-roscore mortyl0834/elec5660-docker-img:v2.0 roscore `
 
    ![1679232068196](image/5660_docker/1679232068196.png)
-4. start container basing on elec5660-docker-img:v2.0 `docker run -it --name="elec5660-container" --volume="<files in your local mechine>:/home/workspace"  --net=ros --env="DISPLAY=elec5660-novnc:0.0" --env="ROS_MASTER_URI=http://elec5660-roscore:11311" /elec5660-docker-img:v2.0 bash`
+4. start container basing on elec5660-docker-img:v2.0 `docker run -it --name="elec5660-container" --volume="<files in your local mechine>:/home/workspace"  --net=ros --env="DISPLAY=elec5660-novnc:0.0" --env="ROS_MASTER_URI=http://elec5660-roscore:11311" mortyl0834/elec5660-docker-img:v2.0 bash`
    ![1679232200996](image/5660_docker/1679232200996.png)
    `--volume="<dirs in your local mechine>:/home/workspace"` maps the local directory "\<dirs in your local mechine\>" to the location in docker container "/home/workspace".
    `-net=ros --env="DISPLAY=novnc:0.0"` maps DISPLAY port to connect with novnc container
