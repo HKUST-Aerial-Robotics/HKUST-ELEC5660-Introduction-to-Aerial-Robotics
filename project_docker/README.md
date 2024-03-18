@@ -56,6 +56,9 @@ Note: If you cannot see the GUI, you should exit VcXsrv and change the launch se
     ```
 
     `/c/usr/workspace` is /usr/workspace in Disk C:/
+    
+    Note: The format should be similar to the above example, and the disk should use the lowercase.
+    
   - `mortyl0834/elec5660-docker-img:v2.0` declares the docker image we are using, which will be automatically downloaded from the docker hub the first time we run it.
 - Open a new terminal when a container is running.
 
