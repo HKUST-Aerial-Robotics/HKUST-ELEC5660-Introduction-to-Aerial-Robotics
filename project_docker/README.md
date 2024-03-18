@@ -33,6 +33,10 @@ Choose your platform and operating system to run your docker container for ELEC5
 > Reference 1: https://dev.to/darksmile92/run-gui-app-in-linux-docker-container-on-windows-host-4kde
 > Reference 2: https://bbs.huaweicloud.com/blogs/281862
 
+Note: If you cannot see the GUI, you should exit VcXsrv and change the launch setting as:
+
+- ![alt step4](./misc/VcXSrv4.jpg)
+
 #### Run Docker
 
 - Open a Powershell window with `WIN+R`, type "powershell", and press `Enter`.
