@@ -1,6 +1,6 @@
 <img src="https://wpcos-1300629776.cos.ap-chengdu.myqcloud.com/picgo/Gemini_Generated_Image_brfxjrbrfxjrbrfx.png" alt="Gemini_Generated_Image_brfxjrbrfxjrbrfx" style="zoom: 25%" />
 
-## HKUST ELEC5660: Introduction to Aerial Robots
+## HKUST ELEC5660: Introduction to Aerial Robotics
 
 ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aerial robots. The goal of this course is to expose students to relevant mathematical foundations and algorithms and train them to develop real-time software modules for aerial robotic systems. Topics to be covered include rigid-body dynamics, system modeling, control, trajectory planning, sensor fusion, and vision-based state estimation. Students will complete a series of projects that combine into an aerial robot that is capable of vision-based autonomous indoor navigation.
 
