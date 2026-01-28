@@ -1,2 +1,17 @@
-..
+# Python projects
+*.pyc
+__pycache__
+
+# ROS
+devel/
+build/
+logs/
 *.bag
+.catkin_workspace
+*/**/src/CMakeLists.txt
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+.DS_Store

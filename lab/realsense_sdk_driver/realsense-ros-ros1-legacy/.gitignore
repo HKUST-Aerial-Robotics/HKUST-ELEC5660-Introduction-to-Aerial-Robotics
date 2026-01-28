@@ -1,8 +1,0 @@
-*.bin
-*.ppm
-*.bag
-*.pyc
-*.ini
-.idea/
-.vs/
-*.json
