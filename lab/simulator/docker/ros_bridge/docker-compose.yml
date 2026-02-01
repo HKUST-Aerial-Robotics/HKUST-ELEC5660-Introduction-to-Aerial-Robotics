@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  ros_bridge:
+    image: ros_bridge:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ros_bridge
+    restart: no
+    ipc: host
+    network_mode: host
+    environment:
+      - DISPLAY=:10.0

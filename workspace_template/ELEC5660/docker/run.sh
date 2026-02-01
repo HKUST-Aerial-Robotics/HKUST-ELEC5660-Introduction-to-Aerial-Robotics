@@ -9,6 +9,9 @@ fi
 
 docker run -it --rm \
     --net=host \
-    -v $SCRIPT_DIR/../../../assignments:/ws \
+    --ipc=host \
+    --privileged \
+    -v /dev:/dev \
+    -v $SCRIPT_DIR/../../../:/ws \
     elec5660:2026 \
     "$CMD" "$@"

@@ -1,0 +1,171 @@
+# Here we set the parts that would
+# be re-used between services to an
+# extension field
+# https://docs.docker.com/compose/compose-file/compose-file-v3/#extension-fields
+x-default-isaac-lab-volumes: &default-isaac-lab-volumes
+  # These volumes follow from this page
+  # https://docs.omniverse.nvidia.com/app_isaacsim/app_isaacsim/install_faq.html#save-isaac-sim-configs-on-local-disk
+  - type: volume
+    source: isaac-cache-kit
+    target: ${DOCKER_ISAACSIM_ROOT_PATH}/kit/cache
+  - type: volume
+    source: isaac-cache-ov
+    target: ${DOCKER_USER_HOME}/.cache/ov
+  - type: volume
+    source: isaac-cache-pip
+    target: ${DOCKER_USER_HOME}/.cache/pip
+  - type: volume
+    source: isaac-cache-gl
+    target: ${DOCKER_USER_HOME}/.cache/nvidia/GLCache
+  - type: volume
+    source: isaac-cache-compute
+    target: ${DOCKER_USER_HOME}/.nv/ComputeCache
+  - type: volume
+    source: isaac-logs
+    target: ${DOCKER_USER_HOME}/.nvidia-omniverse/logs
+  - type: volume
+    source: isaac-carb-logs
+    target: ${DOCKER_ISAACSIM_ROOT_PATH}/kit/logs/Kit/Isaac-Sim
+  - type: volume
+    source: isaac-data
+    target: ${DOCKER_USER_HOME}/.local/share/ov/data
+  - type: volume
+    source: isaac-docs
+    target: ${DOCKER_USER_HOME}/Documents
+    # This overlay allows changes on the local files to
+    # be reflected within the container immediately
+  - type: bind
+    source: ${PROJECT_ROOT}/docker/IsaacLab/source
+    target: ${DOCKER_ISAACLAB_PATH}/source
+  - type: bind
+    source: ${PROJECT_ROOT}/docker/IsaacLab/docs
+    target: ${DOCKER_ISAACLAB_PATH}/docs
+  - type: bind
+    source: ${PROJECT_ROOT}/docker/IsaacLab/tools
+    target: ${DOCKER_ISAACLAB_PATH}/tools
+  - type: bind
+    source: ${PROJECT_ROOT}
+    target: ${DOCKER_ISAACLAB_PATH}/simulator
+  - type: bind
+    source: ${PROJECT_ROOT}/logs
+    target: ${DOCKER_ISAACLAB_PATH}/logs
+    # The effect of these volumes is twofold:
+    # 1. Prevent root-owned files from flooding the _build and logs dir
+    #    on the host machine
+    # 2. Preserve the artifacts in persistent volumes for later copying
+    #    to the host machine
+  - type: volume
+    source: isaac-lab-docs
+    target: ${DOCKER_ISAACLAB_PATH}/docs/_build
+  # - type: volume
+  #   source: isaac-lab-logs
+  #   target: ${DOCKER_ISAACLAB_PATH}/logs
+  - type: volume
+    source: isaac-lab-data
+    target: ${DOCKER_ISAACLAB_PATH}/data_storage
+    # This volume is used to store the X11 authentication file
+  - type: bind
+    source: /tmp/.X11-unix
+    target: /tmp/.X11-unix
+  - type: bind
+    source: /etc/localtime
+    target: /etc/localtime
+    read_only: true
+  - type: bind
+    source: /dev
+    target: /dev
+  - type: bind
+    source: /run/udev
+    target: /run/udev
+
+x-default-isaac-lab-environment: &default-isaac-lab-environment
+  - ISAACSIM_PATH=${DOCKER_ISAACLAB_PATH}/_isaac_sim
+  - OMNI_KIT_ALLOW_ROOT=1
+  - DISPLAY=${DISPLAY}
+  - TERM
+  - QT_X11_NO_MITSHM=1
+
+x-default-isaac-lab-deploy: &default-isaac-lab-deploy
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [ gpu ]
+
+services:
+  # This service is the base Isaac Lab image
+  elec5660simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.sim
+      args:
+        - ISAACSIM_BASE_IMAGE_ARG=${ISAACSIM_BASE_IMAGE}
+        - ISAACSIM_VERSION_ARG=${ISAACSIM_VERSION}
+        - ISAACSIM_ROOT_PATH_ARG=${DOCKER_ISAACSIM_ROOT_PATH}
+        - ISAACLAB_PATH_ARG=${DOCKER_ISAACLAB_PATH}
+        - DOCKER_USER_HOME_ARG=${DOCKER_USER_HOME}
+    image: isaac-lab-elec5660simulator
+    environment: *default-isaac-lab-environment
+    volumes: *default-isaac-lab-volumes
+    privileged: true
+    cap_add:
+      - SYS_RAWIO
+      - SYS_ADMIN
+    network_mode: host
+    ipc: host
+    deploy: *default-isaac-lab-deploy
+    # This is the entrypoint for the container
+    entrypoint: ${ENTRYPOINT:-bash}
+    stdin_open: true
+    tty: true
+
+  elec5660rosbridge:
+    build:
+      context: ./ros_bridge
+      dockerfile: Dockerfile
+    image: elec5660rosbridge
+    restart: no
+    ipc: host
+    network_mode: host
+    entrypoint: ["/entrypoint.sh"]
+
+volumes:
+  # isaac-sim
+  isaac-cache-kit:
+    external: true
+    name: ${ISAAC_CACHE_KIT:-isaac_shared_cache_kit}
+  isaac-cache-ov:
+    external: true
+    name: ${ISAAC_CACHE_OV:-isaac_shared_cache_ov}
+  isaac-cache-pip:
+    external: true
+    name: ${ISAAC_CACHE_PIP:-isaac_shared_cache_pip}
+  isaac-cache-gl:
+    external: true
+    name: ${ISAAC_CACHE_GL:-isaac_shared_cache_gl}
+  isaac-cache-compute:
+    external: true
+    name: ${ISAAC_CACHE_COMPUTE:-isaac_shared_cache_compute}
+  isaac-logs:
+    external: true
+    name: ${ISAAC_LOGS:-isaac_shared_logs}
+  isaac-carb-logs:
+    external: true
+    name: ${ISAAC_CARB_LOGS:-isaac_shared_carb_logs}
+  isaac-data:
+    external: true
+    name: ${ISAAC_DATA:-isaac_shared_data}
+  isaac-docs:
+    external: true
+    name: ${ISAAC_DOCS:-isaac_shared_docs}
+  # isaac-lab
+  isaac-lab-docs:
+    external: true
+    name: ${ISAAC_LAB_DOCS:-isaac_shared_lab_docs}
+  isaac-lab-logs:
+    external: true
+    name: ${ISAAC_LAB_LOGS:-isaac_shared_lab_logs}
+  isaac-lab-data:
+    external: true
+    name: ${ISAAC_LAB_DATA:-isaac_shared_lab_data}

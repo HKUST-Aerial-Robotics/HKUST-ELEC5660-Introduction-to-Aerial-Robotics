@@ -15,7 +15,7 @@ ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aeria
 ### File structure
 
 * course_node: notes
-* assignment: assignment code
+* assignments: assignment code
 * lab: lab notes
 * workspace_template: Terraform template for setting up cloud workspace
 
