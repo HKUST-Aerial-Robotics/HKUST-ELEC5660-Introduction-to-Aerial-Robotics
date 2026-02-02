@@ -15,3 +15,5 @@ logs/
 .idea/
 *.swp
 .DS_Store
+
+.thumbs

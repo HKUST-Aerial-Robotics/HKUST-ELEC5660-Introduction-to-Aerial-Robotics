@@ -158,3 +158,18 @@ RUN touch /etc/profile.d/ros.sh && \
     echo 'export DISPLAY=:10' >> /etc/profile.d/ros.sh && \
     echo 'export VGL_DISPLAY=:10' >> /etc/profile.d/ros.sh && \
     echo "source /opt/ros/${ROS_VERSION}/setup.bash" >> /etc/profile.d/ros.sh
+
+# Install Mavros and Mavlink
+RUN apt-get update && \
+    apt-get install -y \
+    ros-${ROS_VERSION}-vrpn \
+    ros-${ROS_VERSION}-roslint \
+    ros-${ROS_VERSION}-mavros \
+    ros-${ROS_VERSION}-mavros-msgs \
+    ros-${ROS_VERSION}-mavros-extras \
+    ros-${ROS_VERSION}-mavlink && \
+    apt-get clean && \
+    wget https://raw.githubusercontent.com/mavlink/mavros/master/mavros/scripts/install_geographiclib_datasets.sh && \
+    bash ./install_geographiclib_datasets.sh && \
+    rm ./install_geographiclib_datasets.sh && \
+    rm -rf /var/lib/apt/lists/*

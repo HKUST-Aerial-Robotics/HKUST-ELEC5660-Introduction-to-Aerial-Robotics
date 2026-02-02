@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <node pkg="traj_generator" type="freq_scan" name="freq_scan" output="screen">
+    <param name="min_freq" type="double" value="0.5"/>
+    <param name="max_freq" type="double" value="10.0"/>
+    <param name="amp" type="double" value="1.0"/>
+    <param name="scan_duration" type="double" value="60.0"/>
+    <param name="scan_dir" type="string" value="y"/>
+
+    <!-- <remap from="~odom" to="/pos_vel_mocap/odom_TA" /> -->
+    <!-- <remap from="~odom" to="/vins_multi_rgbd/imu_propagate" /> -->
+    <remap from="~odom" to="/ekf/ekf_odom" />
+    <remap from="~traj_state" to="/px4ctrl/traj_state" /> 
+
+  </node>
+
+</launch>

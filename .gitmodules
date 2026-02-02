@@ -1,0 +1,3 @@
+[submodule "lab/simulator/docker/IsaacLab"]
+	path = lab/simulator/docker/IsaacLab
+	url = https://github.com/isaac-sim/IsaacLab.git

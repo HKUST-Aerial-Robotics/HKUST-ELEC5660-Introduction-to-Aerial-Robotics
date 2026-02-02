@@ -1,0 +1,31 @@
+<launch>
+  <arg name="sim_odom_topic" default="/sim/odom" />
+  <arg name="ekf_odom_topic" default="/ekf/ekf_odom" />
+  <arg name="use_joy" default="true" />
+  <arg name="joy_dev" default="/dev/input/js0" />
+  <arg name="joy_autorepeat_rate" default="50.0" />
+
+  <node pkg="joy" type="joy_node" name="joy_node" if="$(arg use_joy)">
+    <param name="dev" value="$(arg joy_dev)" />
+    <param name="autorepeat_rate" value="$(arg joy_autorepeat_rate)" />
+  </node>
+
+  <node pkg="sim_adaptor" type="sim_adaptor_node.py" name="sim_adaptor" output="screen">
+    <param name="sim_odom_topic" value="$(arg sim_odom_topic)" />
+    <param name="ekf_odom_topic" value="$(arg ekf_odom_topic)" />
+    <param name="rc_rate_hz" value="50.0" />
+    <param name="state_rate_hz" value="10.0" />
+    <param name="battery_rate_hz" value="1.0" />
+    <param name="deadzone" value="0.1" />
+    <param name="mode_channel" value="6" />
+    <param name="command_channel" value="7" />
+    <param name="button_mode" value="7" />
+    <param name="button_command" value="6" />
+    <param name="button_reset" value="1" />
+    <param name="invert_left_y" value="false" />
+    <param name="invert_left_x" value="true" />
+    <param name="invert_right_y" value="true" />
+    <param name="invert_right_x" value="false" />
+    <param name="max_thrust" value="16.7" />
+  </node>
+</launch>
