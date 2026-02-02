@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """ROS1 Xbox teleop node for ELEC5660 simulator.
 
-Publishes MAVROS-style setpoints:
-- /mavros/setpoint_raw/attitude (Float32MultiArray)
-- /mavros/setpoint_velocity/cmd_vel (TwistStamped)
-- /mavros/setpoint_position/local (PoseStamped)
+Publishes simulator setpoints:
+- /sim/setpoint_raw/attitude (Float32MultiArray)
+- /sim/setpoint_velocity/cmd_vel (TwistStamped)
+- /sim/setpoint_position/local (PoseStamped)
 
 Input: /joy (sensor_msgs/Joy)
 """
 import math
+import os
+import signal
+import subprocess
 from enum import IntEnum
 from typing import Tuple
 
 import rospy
+import rosgraph
 
 from geometry_msgs.msg import PoseStamped, TwistStamped
 from sensor_msgs.msg import Joy
@@ -70,16 +74,19 @@ class XboxTeleop:
 
         self.max_angle_deg = rospy.get_param("~max_angle_deg", 30.0)
         self.max_yaw_rate_dps = rospy.get_param("~max_yaw_rate_dps", 120.0)
+        self.max_thrust_n = rospy.get_param("~max_thrust_n", 16.7)
         self.vel_scale = rospy.get_param("~vel_scale", 1.0)
         self.pos_rate = rospy.get_param("~pos_rate", 0.05)
         self.yaw_deg_rate = rospy.get_param("~yaw_deg_rate", 2.0)
         self.takeoff_z = rospy.get_param("~takeoff_z", 1.0)
         self.joy_timeout = rospy.get_param("~joy_timeout", 1.0)
         self.frame_world_id = rospy.get_param("~frame_world_id", "world")
+        self.autostart_joy = rospy.get_param("~autostart_joy", True)
+        self.joy_autorepeat_rate = rospy.get_param("~joy_autorepeat_rate", 20.0)
 
-        self.attitude_topic = rospy.get_param("~attitude_topic", "/mavros/setpoint_raw/attitude")
-        self.velocity_topic = rospy.get_param("~velocity_topic", "/mavros/setpoint_velocity/cmd_vel")
-        self.position_topic = rospy.get_param("~position_topic", "/mavros/setpoint_position/local")
+        self.attitude_topic = rospy.get_param("~attitude_topic", "/sim/setpoint_raw/attitude")
+        self.velocity_topic = rospy.get_param("~velocity_topic", "/sim/setpoint_velocity/cmd_vel")
+        self.position_topic = rospy.get_param("~position_topic", "/sim/setpoint_position/local")
         self.reset_topic = rospy.get_param("~reset_topic", "/sim/reset")
         self.joy_topic = rospy.get_param("~joy_topic", "/joy")
 
@@ -93,6 +100,7 @@ class XboxTeleop:
         self._warned_no_joy = False
         self._prev_buttons = {}
         self.lb_world = False
+        self._joy_proc = None
 
         # Setpoints
         self.roll = 0.0
@@ -109,8 +117,61 @@ class XboxTeleop:
         self.y = 0.0
         self.z = 0.0
         self.yaw_deg = 0.0
+        self._last_update_time = None
 
         rospy.Subscriber(self.joy_topic, Joy, self._joy_cb, queue_size=1)
+        self._maybe_start_joy_node()
+        rospy.on_shutdown(self._stop_joy_node)
+
+    def _is_joy_available(self) -> bool:
+        try:
+            master = rosgraph.Master(rospy.get_name())
+            topics = master.getPublishedTopics("")
+        except Exception:
+            return False
+        for name, _ in topics:
+            if name == self.joy_topic:
+                return True
+        return False
+
+    def _maybe_start_joy_node(self) -> None:
+        if not self.autostart_joy:
+            return
+        if self._is_joy_available():
+            return
+        cmd = [
+            "rosrun",
+            "joy",
+            "joy_node",
+            f"_autorepeat_rate:={self.joy_autorepeat_rate}",
+        ]
+        try:
+            preexec = os.setsid if hasattr(os, "setsid") else None
+            self._joy_proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+                preexec_fn=preexec,
+            )
+            rospy.loginfo("Started joy_node (autorepeat_rate=%.1f).", self.joy_autorepeat_rate)
+        except Exception as exc:
+            self._joy_proc = None
+            rospy.logwarn("Failed to start joy_node: %s", exc)
+
+    def _stop_joy_node(self) -> None:
+        proc = self._joy_proc
+        if proc is None:
+            return
+        self._joy_proc = None
+        if proc.poll() is not None:
+            return
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(proc.pid, signal.SIGTERM)
+            else:
+                proc.terminate()
+        except Exception:
+            pass
 
     def _joy_cb(self, msg: Joy) -> None:
         self.joy_msg = msg
@@ -128,7 +189,9 @@ class XboxTeleop:
         return self.joy_msg.buttons[idx]
 
     def _reset_setpoints(self) -> None:
-        self.roll = self.pitch = self.yaw_rate = 0.0
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw_rate = 0.0
         self.thrust = 0.0
         self.vx = self.vy = self.vz = 0.0
         self.yaw_rate_dps = 0.0
@@ -178,29 +241,33 @@ class XboxTeleop:
                     self._reset()
             self._prev_buttons[btn] = pressed
 
-    def _update_attitude(self, left_x: float, left_y: float, right_x: float, right_y: float) -> None:
-        self.roll = max(-1.0, min(1.0, right_x))
-        self.pitch = max(-1.0, min(1.0, -right_y))
-        self.yaw_rate = max(-1.0, min(1.0, -left_x))
-        self.thrust = max(0.0, min(1.0, (-left_y + 1.0) * 0.5))
+    def _update_attitude(self, left_x: float, left_y: float, right_x: float, right_y: float, dt: float) -> None:
+        self.roll = max(-1.0, min(1.0, -right_x)) * self.max_angle_deg
+        self.pitch = max(-1.0, min(1.0, right_y)) * self.max_angle_deg
+
+        yaw_rate_dps = max(-1.0, min(1.0, left_x)) * self.max_yaw_rate_dps
+        self.yaw_deg = (self.yaw_deg + yaw_rate_dps * dt + 180.0) % 360.0 - 180.0
+
+        thrust_norm = max(0.0, min(1.0, (left_y + 1.0) * 0.5))
+        self.thrust = thrust_norm * self.max_thrust_n
 
     def _update_velocity(self, left_x: float, left_y: float, right_x: float, right_y: float) -> None:
-        self.vx = -right_y * self.vel_scale
-        self.vy = -right_x * self.vel_scale
-        self.vz = -left_y * self.vel_scale
-        self.yaw_rate_dps = -left_x * self.max_yaw_rate_dps
+        self.vx = right_y * self.vel_scale
+        self.vy = right_x * self.vel_scale
+        self.vz = left_y * self.vel_scale
+        self.yaw_rate_dps = left_x * self.max_yaw_rate_dps
 
     def _update_position(self, left_x: float, left_y: float, right_x: float, right_y: float) -> None:
         yaw_rad = math.radians(self.yaw_deg)
-        body_dx = -right_y * self.pos_rate
-        body_dy = -right_x * self.pos_rate
+        body_dx = right_y * self.pos_rate
+        body_dy = right_x * self.pos_rate
 
         self.x += body_dx * math.cos(yaw_rad) - body_dy * math.sin(yaw_rad)
         self.y += body_dx * math.sin(yaw_rad) + body_dy * math.cos(yaw_rad)
-        self.z += -left_y * self.pos_rate
+        self.z += left_y * self.pos_rate
         self.z = max(0.0, self.z)
 
-        self.yaw_deg -= left_x * self.yaw_deg_rate
+        self.yaw_deg += left_x * self.yaw_deg_rate
         self.yaw_deg = ((self.yaw_deg + 180.0) % 360.0) - 180.0
 
     def update(self) -> None:
@@ -214,25 +281,28 @@ class XboxTeleop:
 
         self._handle_buttons()
 
+        now = rospy.Time.now()
+        if self._last_update_time is None:
+            dt = 1.0 / CONTROL_RATE_HZ
+        else:
+            dt = max(0.0, (now - self._last_update_time).to_sec())
+        self._last_update_time = now
+
         if self.mode == ControlMode.ATTITUDE:
-            self._update_attitude(left_x, left_y, right_x, right_y)
+            self._update_attitude(left_x, left_y, right_x, right_y, dt)
         elif self.mode == ControlMode.VELOCITY:
             self._update_velocity(left_x, left_y, right_x, right_y)
         else:
             self._update_position(left_x, left_y, right_x, right_y)
 
     def _publish_attitude(self) -> None:
-        roll_deg = self.roll * self.max_angle_deg
-        pitch_deg = self.pitch * self.max_angle_deg
-        yaw_rate_dps = self.yaw_rate * self.max_yaw_rate_dps
-        yaw_rate_rad = math.radians(yaw_rate_dps)
-
-        roll_rad = math.radians(roll_deg)
-        pitch_rad = math.radians(pitch_deg)
-        w, x, y, z = quat_from_euler(roll_rad, pitch_rad, 0.0)
+        roll_rad = math.radians(self.roll)
+        pitch_rad = math.radians(self.pitch)
+        yaw_rad = math.radians(self.yaw_deg)
+        w, x, y, z = quat_from_euler(roll_rad, pitch_rad, yaw_rad)
 
         msg = Float32MultiArray()
-        type_mask = 1 | 2  # Ignore roll/pitch rates
+        type_mask = 1 | 2 | 4  # Ignore roll/pitch/yaw rates
         msg.data = [
             float(type_mask),
             float(w),
@@ -241,7 +311,7 @@ class XboxTeleop:
             float(z),
             0.0,
             0.0,
-            float(yaw_rate_rad),
+            0.0,
             float(self.thrust),
         ]
         self.att_pub.publish(msg)

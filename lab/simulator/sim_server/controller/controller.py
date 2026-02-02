@@ -160,41 +160,52 @@ class CrazyflieController:
 
     def set_attitude_setpoint(
         self,
-        roll: torch.Tensor,
-        pitch: torch.Tensor,
-        yaw_rate: torch.Tensor,
+        roll_deg: torch.Tensor,
+        pitch_deg: torch.Tensor,
+        yaw_deg: torch.Tensor,
         thrust: torch.Tensor,
         env_ids: Optional[torch.Tensor] = None,
     ):
         """
-        Set attitude setpoint (normalized [-1, 1] inputs).
+        Set attitude setpoint (physical units).
 
         Args:
-            roll: Normalized roll [-1, 1] -> [-30, 30] degrees
-            pitch: Normalized pitch [-1, 1] -> [-30, 30] degrees
-            yaw_rate: Normalized yaw rate [-1, 1] -> [-120, 120] deg/s
-            thrust: Normalized thrust [0, 1] -> [0, 65535] PWM
+            roll_deg: Roll angle (degrees)
+            pitch_deg: Pitch angle (degrees)
+            yaw_deg: Yaw angle (degrees)
+            thrust: Total thrust (Newtons)
             env_ids: Specific environments (None = all)
         """
-        # Scale to physical units
-        max_angle = 30.0  # degrees
-        max_yaw_rate = 120.0  # deg/s
-
-        roll_deg = roll * max_angle
-        pitch_deg = pitch * max_angle
-        yaw_rate_dps = yaw_rate * max_yaw_rate
-        thrust_pwm = thrust * 65535.0
+        # Clamp to configured limits
+        roll_deg = torch.clamp(
+            roll_deg,
+            -config.ATTITUDE_ROLL_MAX_DEG,
+            config.ATTITUDE_ROLL_MAX_DEG,
+        )
+        pitch_deg = torch.clamp(
+            pitch_deg,
+            -config.ATTITUDE_PITCH_MAX_DEG,
+            config.ATTITUDE_PITCH_MAX_DEG,
+        )
+        yaw_deg = self._cap_angle(yaw_deg)
+        yaw_deg = torch.clamp(
+            yaw_deg,
+            -config.ATTITUDE_YAW_MAX_DEG,
+            config.ATTITUDE_YAW_MAX_DEG,
+        )
+        thrust = torch.clamp(thrust, 0.0, config.ATTITUDE_THRUST_MAX_N)
+        thrust_pwm = self.power_distribution.thrust_si_to_pwm(thrust)
 
         if env_ids is None:
             self.attitude_setpoint[:, 0] = roll_deg
             self.attitude_setpoint[:, 1] = pitch_deg
-            self.rate_setpoint[:, 2] = yaw_rate_dps  # Yaw is rate-controlled
+            self.yaw_setpoint = yaw_deg
             self.thrust_setpoint = thrust_pwm
             self.control_mode[:] = ControlMode.ATTITUDE
         else:
             self.attitude_setpoint[env_ids, 0] = roll_deg
             self.attitude_setpoint[env_ids, 1] = pitch_deg
-            self.rate_setpoint[env_ids, 2] = yaw_rate_dps
+            self.yaw_setpoint[env_ids] = yaw_deg
             self.thrust_setpoint[env_ids] = thrust_pwm
             self.control_mode[env_ids] = ControlMode.ATTITUDE
 
@@ -221,6 +232,12 @@ class CrazyflieController:
             self.position_setpoint[:, 1] = y
             self.position_setpoint[:, 2] = z
             if yaw is not None:
+                yaw = self._cap_angle(yaw)
+                yaw = torch.clamp(
+                    yaw,
+                    -config.ATTITUDE_YAW_MAX_DEG,
+                    config.ATTITUDE_YAW_MAX_DEG,
+                )
                 self.yaw_setpoint = yaw
             self.control_mode[:] = ControlMode.POSITION
         else:
@@ -228,6 +245,12 @@ class CrazyflieController:
             self.position_setpoint[env_ids, 1] = y
             self.position_setpoint[env_ids, 2] = z
             if yaw is not None:
+                yaw = self._cap_angle(yaw)
+                yaw = torch.clamp(
+                    yaw,
+                    -config.ATTITUDE_YAW_MAX_DEG,
+                    config.ATTITUDE_YAW_MAX_DEG,
+                )
                 self.yaw_setpoint[env_ids] = yaw
             self.control_mode[env_ids] = ControlMode.POSITION
 
@@ -251,6 +274,16 @@ class CrazyflieController:
             velocity_body: If True, vx/vy are body-frame (default)
             env_ids: Specific environments (None = all)
         """
+        vx = torch.clamp(vx, -config.PID_POS_VEL_X_MAX, config.PID_POS_VEL_X_MAX)
+        vy = torch.clamp(vy, -config.PID_POS_VEL_Y_MAX, config.PID_POS_VEL_Y_MAX)
+        vz = torch.clamp(vz, -config.PID_POS_VEL_Z_MAX, config.PID_POS_VEL_Z_MAX)
+        if yaw_rate is not None:
+            yaw_rate = torch.clamp(
+                yaw_rate,
+                -config.ATTITUDE_YAW_RATE_MAX_DPS,
+                config.ATTITUDE_YAW_RATE_MAX_DPS,
+            )
+
         if env_ids is None:
             self.velocity_setpoint[:, 0] = vx
             self.velocity_setpoint[:, 1] = vy
@@ -379,15 +412,7 @@ class CrazyflieController:
         # --- Attitude Control ---
         att_mode_mask = self.control_mode == ControlMode.ATTITUDE
         if att_mode_mask.any():
-            # Yaw is rate-controlled in attitude mode (like firmware)
-            yaw_rate = self.rate_setpoint[:, 2]
-            self.yaw_setpoint = self._cap_angle(
-                self.yaw_setpoint + yaw_rate * self.attitude_dt
-            )
             yaw_des = torch.where(att_mode_mask, self.yaw_setpoint, yaw_des)
-
-            # For attitude mode, yaw is rate-controlled
-            rate_mode[:, 2] = att_mode_mask
 
         # --- Zero thrust handling ---
         # When thrust is zero, disable control (like firmware)

@@ -12,16 +12,15 @@ from builtin_interfaces.msg import Time
 from geometry_msgs.msg import PoseStamped, Quaternion, TwistStamped, Vector3
 from nav_msgs.msg import Odometry
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CameraInfo, CompressedImage
 from std_msgs.msg import Empty, Float32MultiArray
 import torch
 
 from isaaclab.utils.math import euler_xyz_from_quat
 
-
 @dataclass
 class AttitudeTargetLite:
-    """Minimal AttitudeTarget-compatible payload (no mavros dependency)."""
+    """Minimal AttitudeTarget-compatible payload (no ROS-specific dependency)."""
 
     type_mask: int
     orientation: Quaternion
@@ -37,11 +36,11 @@ class AttitudeTargetLite:
 
 @dataclass
 class AttitudeCommand:
-    """Parsed attitude command in degrees and normalized thrust."""
+    """Parsed attitude command in degrees and thrust in Newtons."""
 
     roll_deg: float
     pitch_deg: float
-    yaw_rate_dps: float
+    yaw_deg: float
     thrust: float
 
 
@@ -106,6 +105,17 @@ class RosInterface:
         left_topic: str,
         right_topic: str,
         reset_topic: str,
+        left_info_topic: str,
+        right_info_topic: str,
+        cam_width: int,
+        cam_height: int,
+        cam_fx: float,
+        cam_fy: float,
+        cam_cx: float,
+        cam_cy: float,
+        cam_baseline: float,
+        left_frame_id: str,
+        right_frame_id: str,
     ):
         rclpy.init(args=None)
         self.node = rclpy.create_node("elec5660_sim")
@@ -128,6 +138,8 @@ class RosInterface:
         self._odom_pub = self.node.create_publisher(Odometry, odom_topic, qos)
         self._left_pub = self.node.create_publisher(CompressedImage, left_topic, qos)
         self._right_pub = self.node.create_publisher(CompressedImage, right_topic, qos)
+        self._left_info_pub = self.node.create_publisher(CameraInfo, left_info_topic, qos)
+        self._right_info_pub = self.node.create_publisher(CameraInfo, right_info_topic, qos)
 
         self._last_msg: Optional[AttitudeTargetLite] = None
         self._last_msg_time: float = 0.0
@@ -136,6 +148,16 @@ class RosInterface:
         self._last_position: Optional[PositionCommand] = None
         self._last_position_time: float = 0.0
         self._reset_requested: bool = False
+
+        self._cam_width = cam_width
+        self._cam_height = cam_height
+        self._cam_fx = cam_fx
+        self._cam_fy = cam_fy
+        self._cam_cx = cam_cx
+        self._cam_cy = cam_cy
+        self._cam_baseline = cam_baseline
+        self._left_frame_id = left_frame_id
+        self._right_frame_id = right_frame_id
 
     def _on_attitude_target(self, msg: Float32MultiArray) -> None:
         data = list(msg.data)
@@ -201,25 +223,24 @@ class RosInterface:
             if timeout_s <= 0.0 or (now - self._last_msg_time) <= timeout_s:
                 msg = self._last_msg
                 use_attitude = (msg.type_mask & AttitudeTargetLite.IGNORE_ATTITUDE) == 0
-                use_yaw_rate = (msg.type_mask & AttitudeTargetLite.IGNORE_YAW_RATE) == 0
                 use_thrust = (msg.type_mask & AttitudeTargetLite.IGNORE_THRUST) == 0
 
                 if use_attitude:
-                    roll, pitch, _yaw = quat_to_euler_xyz(msg.orientation)
+                    roll, pitch, yaw = quat_to_euler_xyz(msg.orientation)
                     roll_deg = float(torch.rad2deg(torch.tensor(roll)).item())
                     pitch_deg = float(torch.rad2deg(torch.tensor(pitch)).item())
+                    yaw_deg = float(torch.rad2deg(torch.tensor(yaw)).item())
                 else:
                     roll_deg = 0.0
                     pitch_deg = 0.0
+                    yaw_deg = 0.0
 
-                yaw_rate_dps = float(torch.rad2deg(torch.tensor(msg.body_rate.z)).item()) if use_yaw_rate else 0.0
                 thrust = float(msg.thrust) if use_thrust else 0.0
-                thrust = max(0.0, min(1.0, thrust))
 
                 att_cmd = AttitudeCommand(
                     roll_deg=roll_deg,
                     pitch_deg=pitch_deg,
-                    yaw_rate_dps=yaw_rate_dps,
+                    yaw_deg=yaw_deg,
                     thrust=thrust,
                 )
                 candidates.append(
@@ -352,6 +373,32 @@ class RosInterface:
             self._left_pub.publish(msg)
         else:
             self._right_pub.publish(msg)
+
+    def publish_camera_info(self, *, sim_time_s: float, is_left: bool) -> None:
+        msg = CameraInfo()
+        msg.header.stamp = to_ros_time(sim_time_s)
+        msg.header.frame_id = self._left_frame_id if is_left else self._right_frame_id
+        msg.width = int(self._cam_width)
+        msg.height = int(self._cam_height)
+
+        msg.distortion_model = "plumb_bob"
+        msg.d = [0.0, 0.0, 0.0, 0.0, 0.0]
+
+        fx = float(self._cam_fx)
+        fy = float(self._cam_fy)
+        cx = float(self._cam_cx)
+        cy = float(self._cam_cy)
+
+        msg.k = [fx, 0.0, cx, 0.0, fy, cy, 0.0, 0.0, 1.0]
+        msg.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+        tx = 0.0 if is_left else -fx * float(self._cam_baseline)
+        msg.p = [fx, 0.0, cx, tx, 0.0, fy, cy, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+        if is_left:
+            self._left_info_pub.publish(msg)
+        else:
+            self._right_info_pub.publish(msg)
 
     def shutdown(self) -> None:
         self.node.destroy_node()

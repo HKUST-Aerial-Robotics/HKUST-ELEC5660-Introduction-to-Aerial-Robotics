@@ -12,8 +12,6 @@ from isaaclab.assets import Articulation
 from isaaclab.sim import SimulationContext, SimulationCfg
 from isaaclab.sensors.camera import Camera, CameraCfg
 from isaaclab.utils.math import euler_xyz_from_quat, matrix_from_quat
-from pxr import UsdGeom
-
 from assets.omninxt.omninxt import OMNINXT_CFG
 
 from config import SimCfg
@@ -42,13 +40,16 @@ class SimulationManager:
         self.sim = self._setup_simulation()
         self.robot = self._setup_robot()
         self._apply_robot_physics_overrides()
-        sim_utils.update_stage()
         self.camera_left, self.camera_right = self._setup_cameras()
 
         # Controller
         self.controller = CrazyflieController(num_envs=1, device=self.device)
 
+        # Cache body ids after PhysX view is initialized.
+        self._body_ids = None
+
         # ROS2
+        fx, fy, cx, cy = cfg.camera.intrinsics()
         self.ros = RosInterface(
             control_topic=cfg.control_topic,
             velocity_topic=cfg.velocity_topic,
@@ -57,7 +58,31 @@ class SimulationManager:
             left_topic=cfg.camera.left_topic,
             right_topic=cfg.camera.right_topic,
             reset_topic=cfg.reset_topic,
+            left_info_topic=cfg.camera.left_info_topic,
+            right_info_topic=cfg.camera.right_info_topic,
+            cam_width=cfg.camera.width,
+            cam_height=cfg.camera.height,
+            cam_fx=fx,
+            cam_fy=fy,
+            cam_cx=cx,
+            cam_cy=cy,
+            cam_baseline=cfg.camera.baseline,
+            left_frame_id=cfg.camera.left_frame_id,
+            right_frame_id=cfg.camera.right_frame_id,
         )
+
+        # Preallocate command tensors to avoid per-step allocations.
+        self._cmd_roll = torch.zeros(1, device=self.device)
+        self._cmd_pitch = torch.zeros(1, device=self.device)
+        self._cmd_yaw = torch.zeros(1, device=self.device)
+        self._cmd_thrust = torch.zeros(1, device=self.device)
+        self._cmd_vx = torch.zeros(1, device=self.device)
+        self._cmd_vy = torch.zeros(1, device=self.device)
+        self._cmd_vz = torch.zeros(1, device=self.device)
+        self._cmd_yaw_rate = torch.zeros(1, device=self.device)
+        self._cmd_px = torch.zeros(1, device=self.device)
+        self._cmd_py = torch.zeros(1, device=self.device)
+        self._cmd_pz = torch.zeros(1, device=self.device)
 
         self._reset()
 
@@ -70,7 +95,6 @@ class SimulationManager:
         scene_usd = self.cfg.scene_usd
         if scene_usd is None:
             from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
-
             scene_usd = f"{ISAAC_NUCLEUS_DIR}/Environments/Grid/default_environment.usd"
         env_cfg = sim_utils.UsdFileCfg(usd_path=scene_usd)
         env_cfg.func(self.cfg.scene_prim_path, env_cfg)
@@ -88,7 +112,6 @@ class SimulationManager:
             self.cfg.robot_prim_path,
             robot_cfg.spawn,
             translation=robot_cfg.init_state.pos,
-            orientation=self.cfg.robot_spawn_rot,
         )
         return Articulation(robot_cfg)
 
@@ -109,6 +132,7 @@ class SimulationManager:
     def _setup_cameras(self) -> tuple[Camera, Camera]:
         cam_cfg = self.cfg.camera
         update_period = 1.0 / float(cam_cfg.fps)
+        body_prim = f"{self.cfg.robot_prim_path}/{self.cfg.robot_body_prim}"
 
         left_offset = CameraCfg.OffsetCfg(
             pos=(cam_cfg.forward_offset, cam_cfg.baseline * 0.5, cam_cfg.up_offset),
@@ -135,7 +159,7 @@ class SimulationManager:
         )
 
         left_cfg = CameraCfg(
-            prim_path=f"{self.cfg.robot_prim_path}/StereoLeft",
+            prim_path=f"{body_prim}/StereoLeft",
             width=cam_cfg.width,
             height=cam_cfg.height,
             update_period=update_period,
@@ -144,7 +168,7 @@ class SimulationManager:
             spawn=left_pinhole_cfg,
         )
         right_cfg = CameraCfg(
-            prim_path=f"{self.cfg.robot_prim_path}/StereoRight",
+            prim_path=f"{body_prim}/StereoRight",
             width=cam_cfg.width,
             height=cam_cfg.height,
             update_period=update_period,
@@ -159,22 +183,23 @@ class SimulationManager:
         self.sim.reset()
         self.robot.reset()
         self.robot.update(self.sim.get_physics_dt())
+        self._cache_body_ids()
 
-        state = self._get_robot_state()
+        state = self._get_control_state()
         self.controller.reset(
             state={
                 "position": state["position"],
                 "attitude": state["attitude"],
             }
         )
-        self._set_hover_setpoint()
+        self._set_hover_setpoint(state["attitude"][:, 2])
 
-    def _get_robot_state(self) -> dict[str, torch.Tensor]:
+    def _get_control_state(self) -> dict[str, torch.Tensor]:
         root_state = self.robot.data.root_state_w
 
-        position = root_state[:, :3].clone()
-        velocity = root_state[:, 7:10].clone()
-        orientation = root_state[:, 3:7].clone()
+        position = root_state[:, :3]
+        velocity = root_state[:, 7:10]
+        orientation = root_state[:, 3:7]
 
         roll, pitch, yaw = euler_xyz_from_quat(orientation)
         euler_rad = torch.stack([roll, pitch, yaw], dim=-1)
@@ -195,28 +220,39 @@ class SimulationManager:
             "angular_velocity_world": omega_world,
         }
 
-    def _apply_control(self) -> None:
-        state = self._get_robot_state()
-        ctrl_state = {
-            "position": state["position"],
-            "velocity": state["velocity"],
-            "attitude": state["attitude"],
-            "angular_velocity": state["angular_velocity"],
+    def _get_odom_state(self) -> dict[str, torch.Tensor]:
+        root_state = self.robot.data.root_state_w
+        return {
+            "position": root_state[:, :3],
+            "orientation": root_state[:, 3:7],
+            "velocity": root_state[:, 7:10],
+            "angular_velocity_world": root_state[:, 10:13],
         }
-        force, torque = self.controller.compute(ctrl_state)
+
+    def _apply_control(self, state: dict[str, torch.Tensor]) -> None:
+        force, torque = self.controller.compute(state)
         self._set_robot_forces(force, torque)
 
     def _set_robot_forces(self, forces: torch.Tensor, torques: torch.Tensor) -> None:
         forces_reshaped = forces.unsqueeze(1)
         torques_reshaped = torques.unsqueeze(1)
-        body_ids = self.robot.find_bodies("body")[0]
-        # Use the permanent wrench composer to avoid deprecated API
-        self.robot.permanent_wrench_composer.set_forces_and_torques(
+        if self._body_ids is None:
+            self._cache_body_ids()
+        self.robot.set_external_force_and_torque(
             forces=forces_reshaped,
             torques=torques_reshaped,
-            body_ids=body_ids,
+            body_ids=self._body_ids,
+            is_global=False,
         )
         self.robot.write_data_to_sim()
+
+    def _cache_body_ids(self) -> None:
+        body_name = self.cfg.robot_body_prim.split("/")[-1]
+        try:
+            self._body_ids = self.robot.find_bodies(body_name)[0]
+        except Exception:
+            self._body_ids = self.robot.find_bodies("body")[0]
+
 
     def _update_setpoint_from_ros(self) -> bool:
         cmd = self.ros.get_latest_command(self.cfg.command_timeout_s)
@@ -224,71 +260,67 @@ class SimulationManager:
             return False
 
         if cmd.mode == ControlMode.ATTITUDE and cmd.attitude is not None:
-            roll_norm = max(-1.0, min(1.0, cmd.attitude.roll_deg / 30.0))
-            pitch_norm = max(-1.0, min(1.0, cmd.attitude.pitch_deg / 30.0))
-            yaw_rate_norm = max(-1.0, min(1.0, cmd.attitude.yaw_rate_dps / 120.0))
-            thrust_norm = max(0.0, min(1.0, cmd.attitude.thrust))
-
-            roll_t = torch.tensor([roll_norm], device=self.device)
-            pitch_t = torch.tensor([pitch_norm], device=self.device)
-            yaw_rate_t = torch.tensor([yaw_rate_norm], device=self.device)
-            thrust_t = torch.tensor([thrust_norm], device=self.device)
+            self._cmd_roll[0] = cmd.attitude.roll_deg
+            self._cmd_pitch[0] = cmd.attitude.pitch_deg
+            self._cmd_yaw[0] = cmd.attitude.yaw_deg
+            self._cmd_thrust[0] = cmd.attitude.thrust
 
             self.controller.set_attitude_setpoint(
-                roll=roll_t,
-                pitch=pitch_t,
-                yaw_rate=yaw_rate_t,
-                thrust=thrust_t,
+                roll_deg=self._cmd_roll,
+                pitch_deg=self._cmd_pitch,
+                yaw_deg=self._cmd_yaw,
+                thrust=self._cmd_thrust,
             )
             return True
 
         if cmd.mode == ControlMode.VELOCITY and cmd.velocity is not None:
             vel = cmd.velocity
-            vx_t = torch.tensor([vel.vx], device=self.device)
-            vy_t = torch.tensor([vel.vy], device=self.device)
-            vz_t = torch.tensor([vel.vz], device=self.device)
-            yaw_rate_t = torch.tensor([vel.yaw_rate_dps], device=self.device)
+            self._cmd_vx[0] = vel.vx
+            self._cmd_vy[0] = vel.vy
+            self._cmd_vz[0] = vel.vz
+            self._cmd_yaw_rate[0] = vel.yaw_rate_dps
             self.controller.set_velocity_setpoint(
-                vx=vx_t,
-                vy=vy_t,
-                vz=vz_t,
-                yaw_rate=yaw_rate_t,
+                vx=self._cmd_vx,
+                vy=self._cmd_vy,
+                vz=self._cmd_vz,
+                yaw_rate=self._cmd_yaw_rate,
                 velocity_body=vel.body_frame,
             )
             return True
 
         if cmd.mode == ControlMode.POSITION and cmd.position is not None:
             pos = cmd.position
-            x_t = torch.tensor([pos.x], device=self.device)
-            y_t = torch.tensor([pos.y], device=self.device)
-            z_t = torch.tensor([pos.z], device=self.device)
+            self._cmd_px[0] = pos.x
+            self._cmd_py[0] = pos.y
+            self._cmd_pz[0] = pos.z
             yaw_t = None
             if pos.yaw_deg is not None:
-                yaw_t = torch.tensor([pos.yaw_deg], device=self.device)
+                self._cmd_yaw[0] = pos.yaw_deg
+                yaw_t = self._cmd_yaw
 
             self.controller.set_position_setpoint(
-                x=x_t,
-                y=y_t,
-                z=z_t,
+                x=self._cmd_px,
+                y=self._cmd_py,
+                z=self._cmd_pz,
                 yaw=yaw_t,
             )
             return True
 
         return False
 
-    def _set_hover_setpoint(self) -> None:
-        state = self._get_robot_state()
-        yaw = state["attitude"][:, 2]
+    def _set_hover_setpoint(self, yaw: torch.Tensor) -> None:
         target = self.cfg.robot_init_pos
+        self._cmd_px[0] = target[0]
+        self._cmd_py[0] = target[1]
+        self._cmd_pz[0] = target[2]
         self.controller.set_position_setpoint(
-            x=torch.tensor([target[0]], device=self.device),
-            y=torch.tensor([target[1]], device=self.device),
-            z=torch.tensor([target[2]], device=self.device),
+            x=self._cmd_px,
+            y=self._cmd_py,
+            z=self._cmd_pz,
             yaw=yaw,
         )
 
-    def _publish_odom(self, sim_time_s: float) -> None:
-        state = self._get_robot_state()
+    def _publish_odom(self, sim_time_s: float, state: dict[str, torch.Tensor]) -> None:
         pos = state["position"][0].detach()
         quat = state["orientation"][0].detach()
         vel = state["velocity"][0].detach()
@@ -316,12 +348,14 @@ class SimulationManager:
             image=left[0].detach(),
             is_left=True,
         )
+        self.ros.publish_camera_info(sim_time_s=sim_time_s, is_left=True)
         self.ros.publish_image(
             sim_time_s=sim_time_s,
             frame_id=self.cfg.camera.right_frame_id,
             image=right[0].detach(),
             is_left=False,
         )
+        self.ros.publish_camera_info(sim_time_s=sim_time_s, is_left=False)
 
     def run(self) -> None:
         physics_dt = self.sim.get_physics_dt()
@@ -332,36 +366,41 @@ class SimulationManager:
         sim_time_s = 0.0
         step_count = 0
 
-        while self.simulation_app.is_running() and self._running:
-            # ROS2 I/O
-            self.ros.spin_once()
-            if self.ros.consume_reset_request():
-                self._reset()
-                self.ros.clear_commands()
-                continue
-            has_cmd = self._update_setpoint_from_ros()
-            if not has_cmd:
-                self._set_hover_setpoint()
+        with torch.no_grad():
+            while self.simulation_app.is_running() and self._running:
+                # ROS2 I/O
+                self.ros.spin_once()
+                if self.ros.consume_reset_request():
+                    self._reset()
+                    self.ros.clear_commands()
+                    continue
 
-            # Control
-            self._apply_control()
+                control_state = self._get_control_state()
+                has_cmd = self._update_setpoint_from_ros()
+                if not has_cmd:
+                    self._set_hover_setpoint(control_state["attitude"][:, 2])
 
-            # Step sim
-            render = (step_count % render_interval) == 0
-            self.sim.step(render=render)
-            self.robot.update(physics_dt)
+                # Control
+                self._apply_control(control_state)
 
-            sim_time_s += physics_dt
+                # Step sim
+                render = (step_count % render_interval) == 0
+                self.sim.step(render=render)
+                self.robot.update(physics_dt)
 
-            # Odom at physics rate
-            self._publish_odom(sim_time_s)
+                sim_time_s += physics_dt
 
-            # Camera at render rate
-            if render:
-                self.camera_left.update(dt=camera_dt)
-                self.camera_right.update(dt=camera_dt)
-                self._publish_stereo(sim_time_s)
-            step_count += 1
+                # Odom at physics rate (no expensive conversions)
+                odom_state = self._get_odom_state()
+                self._publish_odom(sim_time_s, odom_state)
+
+                # Camera at render rate
+                if render:
+                    self.camera_left.update(dt=camera_dt)
+                    self.camera_right.update(dt=camera_dt)
+                    self._publish_stereo(sim_time_s)
+
+                step_count += 1
 
         self.ros.shutdown()
 

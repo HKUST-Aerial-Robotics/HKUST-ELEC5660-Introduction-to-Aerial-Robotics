@@ -58,10 +58,10 @@ def benchmark_case(
     # Configure control mode and setpoints
     if mode == "attitude":
         controller.set_attitude_setpoint(
-            roll=torch.zeros(num_envs, device=device),
-            pitch=torch.zeros(num_envs, device=device),
-            yaw_rate=torch.zeros(num_envs, device=device),
-            thrust=torch.full((num_envs,), 0.5, device=device),
+            roll_deg=torch.zeros(num_envs, device=device),
+            pitch_deg=torch.zeros(num_envs, device=device),
+            yaw_deg=torch.zeros(num_envs, device=device),
+            thrust=torch.full((num_envs,), 0.5 * config.ATTITUDE_THRUST_MAX_N, device=device),
         )
     elif mode == "velocity":
         controller.set_velocity_setpoint(

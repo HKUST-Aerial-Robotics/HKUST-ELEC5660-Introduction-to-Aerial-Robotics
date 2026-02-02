@@ -34,6 +34,12 @@ ELEC5660 is an HKUST PG course which gives a comprehensive introduction to aeria
 | proj3phase2 | Implement an augmented EKF for sensor fusion of IMU, visual odometry, and tag-based pose estimation | ![p3p2](fig/p3p2.gif) |
 | proj3phase3_lab3 |  Integrate the whole system onboard for tracking trajectory or autonomous flight without OptTrack motion capture system | ![p3p3](fig/p3p3.gif) |
 
+### Simulator (Optional)
+
+In order to facilitate development and testing of algorithms, we provide a simulator based on NVIDIA Isaac Sim. The simulator supports realistic physics simulation, sensor simulation (IMU, stereo camera), and ROS interface for easy integration with your code. You can find the simulator code and instructions in the `lab/simulator` directory.
+
+![sim_demo](fig/sim_demo.gif)
+
 ### Contact
 
 For questions and suggestions, please contact TAs

@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+
+<launch>
+
+  <node pkg="traj_generator" type="line_test" name="line_test" output="screen">
+    <param name="LINEAR_ACC" type="double" value="0.5"/>
+    <param name="LINEAR_VEL" type="double" value="0.5"/>
+    <param name="TRAJ_LENGTH" type="double" value="7.0"/>
+  </node>
+
+</launch>

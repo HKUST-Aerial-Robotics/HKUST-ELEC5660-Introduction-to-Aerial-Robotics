@@ -147,7 +147,9 @@ RUN --mount=type=cache,target=/var/cache/apt \
     apt -y autoremove && apt clean autoclean && \
     rm -rf /var/lib/apt/lists/* && \
     # Add sourcing of setup.bash to .bashrc
-    echo "source /opt/ros/jazzy/setup.bash" >> ${HOME}/.bashrc
+    echo "source /opt/ros/jazzy/setup.bash" >> ${HOME}/.bashrc && \
+    true
+
 
 # Copy the RMW specifications for ROS2
 # https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_ros.html
