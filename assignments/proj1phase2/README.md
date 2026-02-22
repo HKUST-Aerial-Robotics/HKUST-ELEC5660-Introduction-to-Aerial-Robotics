@@ -84,3 +84,7 @@ The report should include the following sections with max 2 pages:
 Please submit a single zip file named `proj1phase2_yourname.zip` to the canvas.
 
 Please cite the paper, GitHub repository, or any other resources you referred to while completing this assignment. Please keep [academic integrity](https://registry.hkust.edu.hk/resource-library/academic-integrity), plagiarism is not tolerated in this course.
+
+## Late Submission Policy
+
+Late submissions are accepted up to 7 days after the due date, with 5% (of the total grade of the item) penalty per day.
