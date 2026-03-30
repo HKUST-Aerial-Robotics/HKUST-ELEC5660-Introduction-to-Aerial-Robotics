@@ -91,7 +91,7 @@ Your implementation will be evaluated on:
 
 ## Provided Code Structure
 
-- `catkin_ws/src/stereo_vo/stereo_vo_estimator/`: ROS package for stereo visual odometry
+  - `catkin_ws/src/stereo_vo/stereo_vo_estimator/`: ROS package for stereo visual odometry
   - `src/estimator.cpp`: **Your implementation goes here**
   - `include/estimator.h`: Estimator class, frame data structure, and internal state variables
   - `src/stereo_vo_node.cpp`: Main ROS node for subscribing to stereo images and publishing results
