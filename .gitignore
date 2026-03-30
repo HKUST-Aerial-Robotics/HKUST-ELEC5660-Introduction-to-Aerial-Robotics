@@ -8,7 +8,7 @@ build/
 logs/
 *.bag
 .catkin_workspace
-*/**/src/CMakeLists.txt
+# */**/src/CMakeLists.txt
 
 # IDEs and editors
 .vscode/
