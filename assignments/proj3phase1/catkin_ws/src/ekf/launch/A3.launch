@@ -1,0 +1,18 @@
+<launch>
+
+    <node name="rosbag" pkg="rosbag" type="play" args=" $(find ekf)/bag/ekf_A3.bag -r 0.5" />
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find ekf)/config/rviz_cfg.rviz" />
+
+    <node pkg="ekf" type="ekf" name="ekf" output="screen">
+        <remap from="~imu" to="/djiros/imu"/>
+        <remap from="~tag_odom" to="/tag_detector/odom_ref"/>
+    </node>
+
+    <node pkg="tag_detector" type="tag_detector" name="tag_detector" output="log">
+        <remap from="~image_raw" to="/djiros/image"/>
+        <param name="cam_cal_file" type="string" value="$(find ekf)/config/TA-camera.yml"/>
+        <param name="board_config_file" type="string" value="$(find ekf)/config/tag_1.yml"/>
+    </node>
+
+</launch>
