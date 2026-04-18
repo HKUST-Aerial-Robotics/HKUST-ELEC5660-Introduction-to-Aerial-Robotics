@@ -1,0 +1,17 @@
+<launch>
+    <node pkg="aug_ekf" type="aug_ekf" name="aug_ekf" output="screen">
+        <remap from="~imu" to="/dji_sdk_1/dji_sdk/imu"/>
+        <remap from="~tag_odom" to="/tag_detector/odom_ref"/>
+
+        <param name="aug_ekf/ng" type="double"  value="1.0"/>
+        <param name="aug_ekf/na" type="double"  value="1.0"/>
+        <param name="aug_ekf/nbg" type="double" value="0.1"/>
+        <param name="aug_ekf/nba" type="double" value="0.1"/>
+        <param name="aug_ekf/pnp_p" type="double" value="0.5"/>
+        <param name="aug_ekf/pnp_q" type="double" value="0.5"/>
+        <param name="aug_ekf/vo_pos" type="double" value="0.1"/>
+        <param name="aug_ekf/vo_rot" type="double" value="0.1"/>
+    </node>
+
+    <node name="rosbag" pkg="rosbag" type="play" respawn="false" args="--start=0 --queue=1000 $(find aug_ekf)/bag/imu_pnp_vo.bag" />
+</launch>
