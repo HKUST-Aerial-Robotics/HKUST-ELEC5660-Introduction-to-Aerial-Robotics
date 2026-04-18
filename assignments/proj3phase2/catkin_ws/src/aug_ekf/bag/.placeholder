@@ -1,0 +1,2 @@
+wget https://repo.hkust-uav.org/artifactory/generic-artifactory/rosbag/elec5660/bag_aug_ekf.bag
+wget https://repo.hkust-uav.org/artifactory/generic-artifactory/rosbag/elec5660/imu_pnp_vo.bag

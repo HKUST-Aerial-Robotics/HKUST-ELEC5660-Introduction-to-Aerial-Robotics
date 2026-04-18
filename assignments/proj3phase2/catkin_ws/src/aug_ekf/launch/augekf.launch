@@ -1,0 +1,30 @@
+<launch>
+
+    <node pkg="stereo_vo" type="stereo_vo" name="vo" output="log"
+    args="$(find stereo_vo)/config/realsense_2/realsense_n3_unsync.yaml">
+    </node>
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find aug_ekf)/config/aug_ekf.rviz" />
+
+    <node pkg="tag_detector" type="tag_detector" name="tag_detector" output="log">
+        <remap from="~image_raw" to="/flattener/flatImage_0"/>
+        <param name="cam_cal_file" type="string" value="$(find tag_detector)/config/pt_grey.yml"/>
+        <param name="board_config_file" type="string" value="$(find tag_detector)/config/a.yml"/>
+    </node>
+
+    <node pkg="aug_ekf" type="aug_ekf" name="aug_ekf" output="screen">
+        <remap from="~imu" to="/dji_sdk_1/dji_sdk/imu"/>
+        <remap from="~tag_odom" to="/tag_detector/odom_yourwork"/>
+
+        <param name="aug_ekf/ng" type="double"  value="1.0"/>
+        <param name="aug_ekf/na" type="double"  value="1.0"/>
+        <param name="aug_ekf/nbg" type="double" value="0.1"/>
+        <param name="aug_ekf/nba" type="double" value="0.1"/>
+        <param name="aug_ekf/pnp_p" type="double" value="5.0"/>
+        <param name="aug_ekf/pnp_q" type="double" value="5.0"/>
+        <param name="aug_ekf/vo_pos" type="double" value="0.1"/>
+        <param name="aug_ekf/vo_rot" type="double" value="0.1"/>
+    </node>
+
+    <node name="rosbag" pkg="rosbag" type="play" respawn="false" args="--start=0 --queue=1000 $(find aug_ekf)/bag/bag_aug_ekf.bag" />
+</launch>

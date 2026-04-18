@@ -1,0 +1,10 @@
+<launch>
+    <node pkg="stereo_vo" type="stereo_vo" name="stereo_vo_node" output="screen" args="$(find stereo_vo)/config/realsense_1/realsense_n3_unsync.yaml">
+    </node>
+
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find stereo_vo)/config/stereo.rviz" />
+
+    <node name="rosbag" pkg="rosbag" type="play" respawn="false" args="--delay=1 --queue=1000 $(find stereo_vo)/bag/realsense_1.bag" />
+
+</launch>
+
